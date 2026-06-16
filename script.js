@@ -247,24 +247,36 @@ async function setFile(f) {
 
 /* ── Audio Preview (browser-side, hanya untuk dengarkan audio asli) ── */
 async function loadPreview(arrayBuffer) {
-  stopPreview();
+  fullStopPreview();
   if (previewAudioCtx) { try { previewAudioCtx.close(); } catch (e) {} }
   previewAudioCtx = new AudioContext();
   previewBuffer = await previewAudioCtx.decodeAudioData(arrayBuffer.slice(0));
   document.getElementById('previewSection').classList.remove('hidden');
+  isPaused = false;
   previewOffset = 0;
-  updatePreviewBtn(false);
+  updatePreviewBtn('play');
   updateStopBtn(false);
   drawWaveform(previewBuffer, 0);
   updatePreviewProgress(0);
 }
 
-function updatePreviewBtn(playing) {
+/* ── Preview state ── */
+// previewOffset = posisi detik terakhir (untuk resume/seek)
+// isPaused = true jika di-pause di tengah (bukan stopped)
+
+var isPaused = false;
+
+function updatePreviewBtn(state) {
+  // state: 'play' | 'pause' | 'resume'
   var btn = document.getElementById('previewPlayBtn');
   if (!btn) return;
-  btn.innerHTML = playing
-    ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Pause'
-    : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> Preview';
+  if (state === 'pause') {
+    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Pause';
+  } else if (state === 'resume') {
+    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> Resume';
+  } else {
+    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> Preview';
+  }
 }
 
 function updateStopBtn(hasProgress) {
@@ -273,32 +285,78 @@ function updateStopBtn(hasProgress) {
   btn.disabled = !hasProgress;
 }
 
-function playPreview() {
+function _stopSource() {
+  // Hentikan source aktif tanpa mengubah state offset/paused
+  cancelAnimationFrame(previewAnimId);
+  if (previewSource) {
+    previewSource.onended = null; // cegah race condition
+    try { previewSource.stop(); } catch (e) {}
+    previewSource = null;
+  }
+}
+
+function playFromOffset(offset) {
   if (!previewBuffer || !previewAudioCtx) return;
+  _stopSource();
   if (previewAudioCtx.state === 'suspended') previewAudioCtx.resume();
-  stopPreview();
+  previewOffset = clamp(offset, 0, previewBuffer.duration);
   previewSource = previewAudioCtx.createBufferSource();
   previewSource.buffer = previewBuffer;
   previewSource.connect(previewAudioCtx.destination);
   previewSource.start(0, previewOffset);
   previewStartTime = previewAudioCtx.currentTime - previewOffset;
-  isPreviewPlaying = true; updatePreviewBtn(true); updateStopBtn(true);
+  isPreviewPlaying = true;
+  isPaused = false;
+  updatePreviewBtn('pause');
+  updateStopBtn(true);
   previewSource.onended = function () {
-    if (isPreviewPlaying) { isPreviewPlaying = false; previewOffset = 0; updatePreviewBtn(false); updatePreviewProgress(0); updateStopBtn(false); cancelAnimationFrame(previewAnimId); }
+    // onended hanya valid jika source ini masih aktif (tidak di-stop manual)
+    if (previewSource === null) return; // di-stop manual, abaikan
+    isPreviewPlaying = false;
+    isPaused = false;
+    previewOffset = 0;
+    cancelAnimationFrame(previewAnimId);
+    updatePreviewBtn('play');
+    updatePreviewProgress(0);
+    updateStopBtn(false);
   };
   animatePreview();
 }
 
-function stopPreview() {
-  if (previewSource) { try { previewSource.stop(); } catch (e) {} previewSource = null; }
-  isPreviewPlaying = false; cancelAnimationFrame(previewAnimId); updatePreviewBtn(false);
+function pausePreview() {
+  if (!isPreviewPlaying || !previewAudioCtx) return;
+  // Simpan posisi saat ini sebelum stop
+  previewOffset = previewAudioCtx.currentTime - previewStartTime;
+  previewOffset = clamp(previewOffset, 0, previewBuffer ? previewBuffer.duration : previewOffset);
+  _stopSource();
+  isPreviewPlaying = false;
+  isPaused = true;
+  updatePreviewBtn('resume');
+  updateStopBtn(true);
+}
+
+function resumePreview() {
+  if (!previewBuffer || !previewAudioCtx) return;
+  playFromOffset(previewOffset);
 }
 
 function fullStopPreview() {
-  stopPreview();
+  _stopSource();
+  isPreviewPlaying = false;
+  isPaused = false;
   previewOffset = 0;
+  updatePreviewBtn('play');
   updatePreviewProgress(0);
   updateStopBtn(false);
+}
+
+// Alias lama agar kode lain tidak error
+function playPreview() { playFromOffset(previewOffset); }
+function stopPreview() {
+  _stopSource();
+  isPreviewPlaying = false;
+  isPaused = false;
+  updatePreviewBtn('play');
 }
 
 function animatePreview() {
@@ -360,16 +418,33 @@ function drawWaveform(buffer, playPct) {
 }
 
 document.addEventListener('click', function (e) {
-  if (e.target.closest('#previewPlayBtn')) { if (isPreviewPlaying) stopPreview(); else playPreview(); }
+  if (e.target.closest('#previewPlayBtn')) {
+    if (isPreviewPlaying) {
+      pausePreview();
+    } else if (isPaused) {
+      resumePreview();
+    } else {
+      playFromOffset(0);
+    }
+  }
   if (e.target.closest('#previewStopBtn')) { fullStopPreview(); }
 });
 document.addEventListener('click', function (e) {
   var track = e.target.closest('#previewTrack');
   if (!track || !previewBuffer) return;
   var rect = track.getBoundingClientRect();
-  previewOffset = clamp((e.clientX - rect.left) / rect.width * previewBuffer.duration, 0, previewBuffer.duration);
-  updateStopBtn(previewOffset > 0);
-  if (isPreviewPlaying) playPreview(); else updatePreviewProgress(previewOffset / previewBuffer.duration);
+  var seekOffset = clamp((e.clientX - rect.left) / rect.width * previewBuffer.duration, 0, previewBuffer.duration);
+  if (isPreviewPlaying) {
+    // Sedang main: langsung lompat ke posisi baru
+    playFromOffset(seekOffset);
+  } else {
+    // Paused atau stopped: update posisi dan tampilan saja
+    previewOffset = seekOffset;
+    isPaused = seekOffset > 0; // jika seek ke posisi > 0 saat stopped, anggap paused
+    updatePreviewProgress(seekOffset / previewBuffer.duration);
+    updateStopBtn(seekOffset > 0);
+    if (isPaused) updatePreviewBtn('resume'); else updatePreviewBtn('play');
+  }
 });
 
 /* ── YouTube – Cobalt ── */
