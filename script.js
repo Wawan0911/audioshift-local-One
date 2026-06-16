@@ -1,19 +1,3 @@
-/* =====================================================
-   AudioShift – script.js (GitHub Pages Edition)
-   ffmpeg.wasm 0.11 (UMD) — 100% di browser, tanpa server
-
-   Filter audio (identik dengan cenzstudio):
-   asetrate=44100*speed → aresample=44100 → volume=gainDb dB
-   Urutan filter ini yang membuat hasil cocok dengan cenzstudio:
-   - asetrate mengubah sample rate SEKALIGUS speed+pitch
-   - aresample mengembalikan ke 44100 Hz untuk output
-   - volume mengatur amplifikasi dB
-   - -t maxDur memotong durasi output
-
-   Metadata dihapus total agar tidak ditolak Roblox:
-   -map_metadata -1 + eksplisit kosongkan tiap field
-===================================================== */
-
 /* ── Konstanta ── */
 const MAX_FILE_BYTES = 20 * 1024 * 1024; // 20 MB
 
@@ -101,11 +85,6 @@ function sanitizeName(str) {
 }
 function round6(v) { return Math.round(v * 1e6) / 1e6; }
 
-/* ── Build audio filter (identik dengan cenzstudio/ffmpegHelper.js) ──
-   asetrate=44100*speed  → ubah sample rate sekaligus speed+pitch
-   aresample=44100       → resample output ke 44100 Hz
-   volume=gainDb dB      → amplifikasi/pelemahan volume
-   Ini menghasilkan efek tape: speed naik = pitch naik (seperti cenzstudio) */
 function buildAudioFilter(speed, gainDb) {
   const targetRate = round6(44100 * speed);
   return `asetrate=${targetRate},aresample=44100,volume=${gainDb}dB`;
@@ -522,7 +501,7 @@ function loadScript(src) {
 async function loadFFmpeg() {
   if (ffmpegReady) return ffmpegObj;
 
-  /* Cek SharedArrayBuffer — wajib untuk ffmpeg.wasm.
+  /* Cek SharedArrayBuffer — untuk ffmpeg.wasm.
      Jika tidak tersedia, Service Worker (sw.js) belum aktif.
      Solusi: reload sekali setelah SW terdaftar. */
   if (typeof SharedArrayBuffer === 'undefined') {
@@ -628,9 +607,6 @@ async function startConvert() {
     setProgress(15, 'Menyiapkan file input…');
     ffmpeg.FS('writeFile', 'input.mp3', inputData);
 
-    /* Filter identik dengan ffmpegHelper.js (cenzstudio):
-       asetrate=44100*speed → aresample=44100 → volume=gainDb dB
-       -map_metadata -1 + clear fields → hapus metadata agar Roblox tidak tolak */
     var af = buildAudioFilter(speed, gainDb);
     var commonArgs = [
       '-i', 'input.mp3',
