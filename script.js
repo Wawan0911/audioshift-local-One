@@ -1,5 +1,4 @@
-/* ── Konstanta ── */
-const MAX_FILE_BYTES = 20 * 1024 * 1024; // 20 MB
+const MAX_FILE_BYTES = 20 * 1024 * 1024;
 
 const COBALT_INSTANCES = [
   'https://cobalt.canine.tools',
@@ -12,7 +11,6 @@ const COBALT_INSTANCES = [
 const DEFAULT = { speed: 2.5, gainDb: -6, maxDur: 400 };
 const LIMITS  = { speed: { min: 0.5, max: 4 }, gainDb: { min: -20, max: 6 }, maxDur: { min: 60, max: 1200 } };
 
-/* ── State ── */
 let sourceMode       = null;
 let audioFile        = null;
 let ytAudioUrl       = null;
@@ -27,8 +25,6 @@ let previewOffset    = 0;
 let previewAnimId    = null;
 let ffmpegReady      = false;
 let ffmpegObj        = null;
-
-/* ── DOM ── */
 const audioInput       = document.getElementById('audioInput');
 const dropArea         = document.getElementById('dropArea');
 const fileInfo         = document.getElementById('fileInfo');
@@ -62,7 +58,6 @@ const globalStatus     = document.getElementById('globalStatus');
 const ffmpegStatus     = document.getElementById('ffmpegStatus');
 const ffmpegStatusText = document.getElementById('ffmpegStatusText');
 
-/* ── Helpers ── */
 function setProgress(pct, label) {
   progressFill.style.width = Math.min(100, pct) + '%';
   progressLabel.textContent = label;
@@ -90,14 +85,10 @@ function buildAudioFilter(speed, gainDb) {
   return `asetrate=${targetRate},aresample=44100,volume=${gainDb}dB`;
 }
 
-/* ── Hitung speed normal Roblox (1/speed, dibulatkan 2 desimal) ── */
 function calcRobloxSpeed(speed) {
   return Math.round((1 / speed) * 100) / 100;
 }
 
-/* ── Settings toggle ── */
-
-// Preset data
 var PRESETS = [
   { speed: 2.1, gainDb: -2,  maxDur: 400, label: 'Lambat' },
   { speed: 2.3, gainDb: -4,  maxDur: 400, label: 'Default lama' },
@@ -105,7 +96,7 @@ var PRESETS = [
   { speed: 2.7, gainDb: -8,  maxDur: 400, label: 'Lebih Cepat' },
   { speed: 2.9, gainDb: -10, maxDur: 400, label: 'Ultra' },
 ];
-var activePreset = PRESETS[2]; // default: Cepat 2.5x
+var activePreset = PRESETS[2];
 
 function applyPresetToCards(p) {
   var cs = document.getElementById('defCardSpeed');
@@ -114,7 +105,6 @@ function applyPresetToCards(p) {
   if (cs) cs.textContent = p.speed + '×';
   if (cg) cg.textContent = (p.gainDb > 0 ? '+' : '') + p.gainDb + ' dB';
   if (cd) cd.textContent = p.maxDur + ' s';
-  // also update default speed note
   var note = document.getElementById('defaultSpeedNote');
   if (note) {
     var lo = Math.round((1 / p.speed) * 100) / 100;
@@ -134,7 +124,6 @@ btnCustom.addEventListener('click', function () {
   btnCustom.classList.add('active'); btnDefault.classList.remove('active');
   customSettings.classList.remove('hidden'); defaultSettings.classList.add('hidden');
   defaultSpeedNote.classList.add('hidden');
-  // restore active preset values to sliders/inputs
   applyPresetToInputs(activePreset);
 });
 
@@ -147,27 +136,21 @@ function applyPresetToInputs(p) {
   });
 }
 
-/* ── Preset pills ── */
 document.querySelectorAll('[data-preset-speed]').forEach(function (btn) {
   btn.addEventListener('click', function () {
     var spd  = parseFloat(btn.dataset.presetSpeed);
     var gain = parseInt(btn.dataset.presetGain || '-6');
     var dur  = parseInt(btn.dataset.presetDur  || '400');
-    // find matching preset
     activePreset = PRESETS.find(function(p){ return p.speed === spd; }) || { speed: spd, gainDb: gain, maxDur: dur };
-    // update sliders + inputs
     slSpeed.value = spd; if (numSpeed) numSpeed.value = spd.toFixed(1);
     slGain.value  = gain; if (numGain) numGain.value = gain;
     slDur.value   = dur;  if (numDur) numDur.value = dur;
-    // update pill highlight
     document.querySelectorAll('.preset-pill').forEach(function (b) { b.classList.remove('active'); });
     btn.classList.add('active');
-    // if in default mode, update cards too
     applyPresetToCards(activePreset);
   });
 });
 
-/* ── Sync slider ↔ number ── */
 slSpeed.addEventListener('input', function () {
   if (numSpeed) numSpeed.value = parseFloat(slSpeed.value).toFixed(1);
   var v = parseFloat(slSpeed.value).toFixed(1);
@@ -197,8 +180,6 @@ if (numDur) {
 }
 document.getElementById('stepDurDown').addEventListener('click', function () { var v = clamp(parseInt(slDur.value) - 1, LIMITS.maxDur.min, LIMITS.maxDur.max); slDur.value = v; if (numDur) numDur.value = v; });
 document.getElementById('stepDurUp').addEventListener('click', function () { var v = clamp(parseInt(slDur.value) + 1, LIMITS.maxDur.min, LIMITS.maxDur.max); slDur.value = v; if (numDur) numDur.value = v; });
-
-/* ── File upload ── */
 audioInput.addEventListener('change', function () { var f = audioInput.files[0]; if (f) handleFileSelect(f); });
 dropArea.addEventListener('dragover', function (e) { e.preventDefault(); dropArea.classList.add('drag-over'); });
 dropArea.addEventListener('dragleave', function () { dropArea.classList.remove('drag-over'); });
@@ -224,7 +205,6 @@ async function setFile(f) {
   try { await loadPreview(await f.arrayBuffer()); } catch (e) {}
 }
 
-/* ── Audio Preview (browser-side, hanya untuk dengarkan audio asli) ── */
 async function loadPreview(arrayBuffer) {
   fullStopPreview();
   if (previewAudioCtx) { try { previewAudioCtx.close(); } catch (e) {} }
@@ -239,14 +219,9 @@ async function loadPreview(arrayBuffer) {
   updatePreviewProgress(0);
 }
 
-/* ── Preview state ── */
-// previewOffset = posisi detik terakhir (untuk resume/seek)
-// isPaused = true jika di-pause di tengah (bukan stopped)
-
 var isPaused = false;
 
 function updatePreviewBtn(state) {
-  // state: 'play' | 'pause' | 'resume'
   var btn = document.getElementById('previewPlayBtn');
   if (!btn) return;
   if (state === 'pause') {
@@ -265,10 +240,9 @@ function updateStopBtn(hasProgress) {
 }
 
 function _stopSource() {
-  // Hentikan source aktif tanpa mengubah state offset/paused
   cancelAnimationFrame(previewAnimId);
   if (previewSource) {
-    previewSource.onended = null; // cegah race condition
+    previewSource.onended = null;
     try { previewSource.stop(); } catch (e) {}
     previewSource = null;
   }
@@ -289,8 +263,7 @@ function playFromOffset(offset) {
   updatePreviewBtn('pause');
   updateStopBtn(true);
   previewSource.onended = function () {
-    // onended hanya valid jika source ini masih aktif (tidak di-stop manual)
-    if (previewSource === null) return; // di-stop manual, abaikan
+    if (previewSource === null) return;
     isPreviewPlaying = false;
     isPaused = false;
     previewOffset = 0;
@@ -304,7 +277,6 @@ function playFromOffset(offset) {
 
 function pausePreview() {
   if (!isPreviewPlaying || !previewAudioCtx) return;
-  // Simpan posisi saat ini sebelum stop
   previewOffset = previewAudioCtx.currentTime - previewStartTime;
   previewOffset = clamp(previewOffset, 0, previewBuffer ? previewBuffer.duration : previewOffset);
   _stopSource();
@@ -329,7 +301,6 @@ function fullStopPreview() {
   updateStopBtn(false);
 }
 
-// Alias lama agar kode lain tidak error
 function playPreview() { playFromOffset(previewOffset); }
 function stopPreview() {
   _stopSource();
@@ -359,7 +330,6 @@ function drawWaveform(buffer, playPct) {
   var canvas = document.getElementById('waveformCanvas');
   if (!canvas || !buffer) return;
   var ctx = canvas.getContext('2d');
-  // Use actual pixel dimensions for crisp rendering
   var W = canvas.width, H = canvas.height;
   ctx.clearRect(0, 0, W, H);
   var data = buffer.getChannelData(0);
@@ -367,8 +337,6 @@ function drawWaveform(buffer, playPct) {
   var mid = H / 2;
   var pct = (typeof playPct === 'number') ? playPct : 0;
   var playX = Math.round(pct * W);
-
-  // Draw background waveform (gray — unplayed portion)
   ctx.beginPath(); ctx.strokeStyle = 'rgba(148,163,184,0.45)'; ctx.lineWidth = 1;
   for (var x = playX; x < W; x++) {
     var mn = 1, mx = -1;
@@ -377,7 +345,6 @@ function drawWaveform(buffer, playPct) {
   }
   ctx.stroke();
 
-  // Draw played portion (indigo/purple — like screenshot)
   ctx.beginPath(); ctx.strokeStyle = '#818cf8'; ctx.lineWidth = 1;
   for (var x2 = 0; x2 < playX; x2++) {
     var mn2 = 1, mx2 = -1;
@@ -386,7 +353,6 @@ function drawWaveform(buffer, playPct) {
   }
   ctx.stroke();
 
-  // Draw playhead line
   if (playX > 0 && playX < W) {
     ctx.beginPath();
     ctx.strokeStyle = '#4f46e5';
@@ -414,19 +380,16 @@ document.addEventListener('click', function (e) {
   var rect = track.getBoundingClientRect();
   var seekOffset = clamp((e.clientX - rect.left) / rect.width * previewBuffer.duration, 0, previewBuffer.duration);
   if (isPreviewPlaying) {
-    // Sedang main: langsung lompat ke posisi baru
     playFromOffset(seekOffset);
   } else {
-    // Paused atau stopped: update posisi dan tampilan saja
     previewOffset = seekOffset;
-    isPaused = seekOffset > 0; // jika seek ke posisi > 0 saat stopped, anggap paused
+    isPaused = seekOffset > 0;
     updatePreviewProgress(seekOffset / previewBuffer.duration);
     updateStopBtn(seekOffset > 0);
     if (isPaused) updatePreviewBtn('resume'); else updatePreviewBtn('play');
   }
 });
 
-/* ── YouTube – Cobalt ── */
 function extractYtId(url) {
   try {
     var u = new URL(url);
@@ -486,7 +449,6 @@ async function loadYoutube() {
   ytLoadBtn.disabled = false;
 }
 
-/* ── Load ffmpeg.wasm 0.11 via CDN ── */
 function loadScript(src) {
   return new Promise(function (resolve, reject) {
     if (document.querySelector('script[src="' + src + '"]')) { resolve(); return; }
@@ -500,15 +462,10 @@ function loadScript(src) {
 
 async function loadFFmpeg() {
   if (ffmpegReady) return ffmpegObj;
-
-  /* Cek SharedArrayBuffer — untuk ffmpeg.wasm.
-     Jika tidak tersedia, Service Worker (sw.js) belum aktif.
-     Solusi: reload sekali setelah SW terdaftar. */
   if (typeof SharedArrayBuffer === 'undefined') {
     if (navigator.serviceWorker && navigator.serviceWorker.controller) {
       throw new Error('SharedArrayBuffer belum aktif. Tekan Ctrl+Shift+R (hard refresh) sekali, lalu coba lagi.');
     } else {
-      // SW baru terdaftar, perlu reload agar header COOP/COEP aktif
       throw new Error('Halaman perlu di-refresh sekali agar FFmpeg.wasm bisa berjalan. Tekan F5 atau Ctrl+R, lalu coba konversi lagi.');
     }
   }
@@ -525,7 +482,6 @@ async function loadFFmpeg() {
     'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.0/dist/',
   ];
 
-  // Load ffmpeg.min.js
   var loaded = false;
   for (var i = 0; i < CDN_MAIN.length; i++) {
     try { await loadScript(CDN_MAIN[i]); loaded = true; break; } catch (e) {}
@@ -534,8 +490,6 @@ async function loadFFmpeg() {
 
   var createFFmpeg = (window.FFmpeg && window.FFmpeg.createFFmpeg) || window.createFFmpeg;
   if (typeof createFFmpeg !== 'function') throw new Error('FFmpeg tidak ditemukan. Coba refresh halaman.');
-
-  // Pilih CDN core tercepat
   var coreBase = CORE_BASE[0];
   for (var j = 0; j < CORE_BASE.length; j++) {
     try {
@@ -563,17 +517,12 @@ async function loadFFmpeg() {
   return ffmpegObj;
 }
 
-/* ── Init default cards ── */
 applyPresetToCards(activePreset);
-
-/* ── Konversi utama ── */
 convertBtn.addEventListener('click', startConvert);
-
 async function startConvert() {
   clearStatus(); downloadSection.classList.add('hidden');
   convertBtn.disabled = true; progressWrap.classList.remove('hidden');
   setProgress(2, 'Mempersiapkan…');
-
   var speed, gainDb, maxDur;
   if (settingsMode === 'default') {
     speed = activePreset.speed; gainDb = activePreset.gainDb; maxDur = activePreset.maxDur;
@@ -585,7 +534,6 @@ async function startConvert() {
 
   try {
     var inputData, baseName;
-
     if (sourceMode === 'file') {
       inputData = new Uint8Array(await audioFile.arrayBuffer());
       baseName  = audioFile.name.replace(/\.mp3$/i, '');
@@ -625,7 +573,6 @@ async function startConvert() {
       '-metadata', 'description=',
     ];
 
-    // Konversi ke OGG Vorbis (Roblox-compatible)
     setProgress(15, 'Mengkonversi ke OGG Vorbis (' + speed + 'x, ' + gainDb + 'dB)…');
     await ffmpeg.run.apply(ffmpeg, commonArgs.concat(['-c:a', 'libvorbis', '-ac', '2', '-ar', '44100', '-b:a', '192k', '-f', 'ogg', 'output.ogg']));
 
@@ -638,13 +585,9 @@ async function startConvert() {
     var mp3Data = ffmpeg.FS('readFile', 'output.mp3');
     var oggBlob = new Blob([oggData.buffer], { type: 'audio/ogg' });
     var mp3Blob = new Blob([mp3Data.buffer], { type: 'audio/mpeg' });
-
-    // Cleanup FS
     try { ffmpeg.FS('unlink', 'input.mp3'); } catch (e) {}
     try { ffmpeg.FS('unlink', 'output.ogg'); } catch (e) {}
     try { ffmpeg.FS('unlink', 'output.mp3'); } catch (e) {}
-
-    // Hitung durasi output
     var outputDuration = 0;
     try {
       var tmpCtx = new AudioContext();
@@ -666,7 +609,6 @@ async function startConvert() {
 }
 
 function renderResult(r) {
-  // Revoke URL lama agar tidak leak memory
   if (dlOgg.href && dlOgg.href.startsWith('blob:')) URL.revokeObjectURL(dlOgg.href);
   if (dlMp3.href && dlMp3.href.startsWith('blob:')) URL.revokeObjectURL(dlMp3.href);
 
